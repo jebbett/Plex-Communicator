@@ -34,11 +34,20 @@ metadata {
     }
 }
 
+
+// External
 def playbackType(type) {
 	sendEvent(name: "playbackType", value: type);
-    log.debug "Playback Type changes to $type"
+    log.debug "Playback type set as $type"
 }
 
+def setPlayStatus(type){
+	log.debug "Status set to $type"
+    // value needs to be playing, paused or stopped
+    sendEvent(name: "status", value: "$type")
+}
+
+// Internal
 def play() {	        
     sendEvent(name: "status", value: "playing");
     log.debug "PLAYING"
