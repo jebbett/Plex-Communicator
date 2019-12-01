@@ -18,7 +18,8 @@
 metadata {
 	definition (name: "Plex Communicator Device", namespace: "jebbett", author: "jebbett") {
 	capability "musicPlayer"
-    command "playbackType", ["string"]
+	command "playbackType", ["string"]
+	attribute "playbackType", "string"
 	}
 	tiles(scale: 2) {
         multiAttributeTile(name:"status", type: "generic", width: 6, height: 4, canChangeIcon: true){
