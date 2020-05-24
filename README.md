@@ -2,7 +2,7 @@
 
 **Using Plex Webhooks, a custom Plex2Hub program or some dodgy polling from your chosen smart home platform this provides you a device that you can then control your lights etc in response to what's being played on Plex**
 
-This will not provide control of Plex
+This will not provide control of Plex, but will give you the current state, type of media and media title of each of your plex devices.
 
 ### Instructions
 
@@ -29,3 +29,6 @@ This is because your hub is not receiving an event, this is usually because the 
 
 **Live Logging - java.lang.NullPointerException: Cannot get property 'authorities' on null object @ line xx**
 You have not enabled OAuth in the parent app
+
+### GitHub
+https://github.com/jebbett/Plex-Communicator
