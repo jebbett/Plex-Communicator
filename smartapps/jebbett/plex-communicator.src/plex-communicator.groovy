@@ -42,7 +42,7 @@ def updated() {
 }
 
 def initialize() {
-	// Subscribe to Plex now playing response
+	// sub to plex now playing response
     subscribe(location, null, response, [filterEvents:false])
     // Add New Devices
     def storedDevices = state.plexClients
@@ -50,7 +50,8 @@ def initialize() {
         try {
             def existingDevice = getChildDevice(deviceId)
             if(!existingDevice) {
-                def childDevice = addChildDevice("jebbett", "Plex Communicator Device", deviceId, null, [name: deviceId, label: storedDevices."$deviceId".name, completedSetup: true])
+            	log.warn "${deviceId} and ${theHub}"
+                def childDevice = addChildDevice("jebbett", "Plex Communicator Device", deviceId, settings.theHub, [name: deviceId, label: storedDevices."$deviceId".name, completedSetup: false])
             }
         } catch (e) { log.error "Error creating device: ${e}" }
     }
@@ -129,7 +130,7 @@ def ApiSettings() {
             href url: "${getApiServerUrl()}/api/smartapps/installations/${app.id}/p2stset?access_token=${state.accessToken}", style:"embedded", required:false, title:"Plex2SmartThings Program Settings", description: ""    		
         }
         section("3. SmartThings Polling *Not Recommended*") {
-        	paragraph("SmartThings will poll every 10 seconds and request the status from Plex, however this method can be unreliable and puts increased load on SmartThings and your network")
+        	paragraph("SmartThings will poll every 10 seconds and request the status from Plex, however this method is unreliable and puts increased load on SmartThings and your network (Don't complain to me that it stops working occasionally)")
             input "stPoller", "bool", title: "Enable - At your own risk", defaultValue:false, submitOnChange: true
         }
         if(settings?.stPoller){plexPoller()}
@@ -146,7 +147,7 @@ def ApiSettings() {
     }
 }
 
-def p2stset() {
+def pwhset() {
     def html = """
     <!DOCTYPE html>
     <html><head><title>Plex2SmartThings Settings</title></head><body><h1>
@@ -155,7 +156,7 @@ def p2stset() {
     render contentType: "text/html", data: html, status: 200
 }
 
-def pwhset() {
+def p2stset() {
     def html = """
     <!DOCTYPE html>
     <html><head><title>Plex Webhooks Settings</title></head><body><h1>
@@ -210,12 +211,12 @@ def getAuthenticationToken() {
 ** CLIENTS
 ************************************************************/
 
-def clientPage() {	
+def clientPage() {
     getClients()
     def devs = getClientList()
 	return dynamicPage(name: "clientPage", title: "NOTE:", nextPage: mainPage, uninstall: false, install: true) {
 		section("If your device does not appear in the list below, start the device playing under your main plex user and then come back to this screen, this will help discover devices not stored by Plex such as ChromeCasts")
-        section("Devices currently in use by plex will have a [►] icon next to them, this can be helpful when multiple devices share the same name."){
+        section("Devices currently in use by plex will have a [►] icon next to them, this can be helpful when multiple devices share the same name, if a device is playing but not shown then press Save above and come back to this screen"){
         	input "devices", "enum", title: "Select Your Devices", options: devs, multiple: true, required: false, submitOnChange: true
   		}
         if(!devices){
@@ -242,13 +243,14 @@ def getClientList() {
 }
 
 def getClients(){
+    // set lists
 	def isMap = state.plexClients instanceof Map
     if(!isMap){state.plexClients = [:]}
     def isMap2 = state.playingClients instanceof Map
     if(!isMap2){state.playingClients = [:]}
     // Get devices.xml clients
     getClientsXML()
-    // Request serrver:32400/status/sessions clients - chome cast for example is not in devices.
+    // Request server:32400/status/sessions clients - chrome cast for example is not in devices.
 	executeRequest("/status/sessions", "GET")
 }
 
@@ -377,13 +379,13 @@ def eventHandler(event) {
     def status = event.status as String
     // change command to right format
     switch(status) {
-		case ["media.play","media.resume","media.scrobble","onplay","playing"]:		status = "play"; 	break;
-        case ["media.pause","onpause","paused"]:									status = "pause"; 	break;
-        case ["media.stop","onstop","stopped"]:										status = "stop"; 	break;
+		case ["media.play","media.resume","media.scrobble","onplay","play"]:	status = "playing"; break;
+        case ["media.pause","onpause","pause"]:									status = "paused"; 	break;
+        case ["media.stop","onstop","stop"]:									status = "stopped"; break;
     }
     getChildDevices().each { pcd ->
         if (event.id == pcd.deviceNetworkId){
-        	pcd."$status"()
+        	pcd.setPlayStatus(status)
             pcd.playbackType(event.type)
         }
     }
