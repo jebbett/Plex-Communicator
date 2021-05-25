@@ -17,10 +17,14 @@
  */
 
 metadata {
-	definition (name: "Plex Communicator Device", namespace: "jebbett", author: "jebbett") {
-	    capability "Music Player"
-	    attribute "playbackType", "string"
-	    attribute "status", "string"
+	definition (
+		name: "Plex Communicator Device", 
+		namespace: "jebbett", 
+		author: "jebbett"
+		importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator-Driver.txt") {
+	capability "Music Player"
+	attribute "playbackType", "string"
+	attribute "status", "string"
         attribute "trackDescription", "string"
 	}
 }
