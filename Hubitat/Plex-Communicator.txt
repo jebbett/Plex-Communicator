@@ -17,8 +17,10 @@ import groovy.json.JsonSlurper
  * VERSION CONTROL
  * ###############
  *
- *  v1.0 - Test Release
- *  v2.0 - Too many changes to list them all (General improvements and fixes + added track description)
+ *  1.0 - Test Release
+ *  2.0 - Too many changes to list them all (General improvements and fixes + added track description)
+ *  3.0 - Added Apple contol & various attributes & general improvements by martinez.mp3
+ *      - Plus added additional option to pull variables not in the webhook (although uses another call so only enablew if needed)
  *
  */
 
@@ -31,9 +33,8 @@ definition(
     iconUrl: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
     iconX2Url: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
     iconX3Url: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
-    oauth: [displayName: "PlexServer", displayLink: ""],
+    oauth: [displayName: "PlexServer", displayLink: ""])
     importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator.txt"
-)
 
 
 def installed() {
@@ -121,8 +122,10 @@ def mainPage() {
         	href "clientPage", title:"Select Your Devices", description: "Select the devices you want to monitor" 
             href "authPage", title:"Plex Account Details", description: "Update Plex Account Details"
         	href(name: "ApiSettings", title: "Connection Methods", required: false, page: "ApiSettings", description: "Select your method for connecting to Plex")
+            input "moreInfo", "bool", title: "Get more info from server (Will increase load on hubitat)", defaultValue:false, submitOnChange: true
             input "logging", "bool", title: "Turn on to enable debug logs", defaultValue:false, submitOnChange: true
     	}
+        section("*More Info Option above is not useful to most and only enabled if needed, it will provide resolution information only currently"){}
         section("If you want to control lighting scenes then the 'MediaScene' SmartApp is ideal for this purpose"){}
     }
 }
@@ -269,24 +272,34 @@ def getNowPlayingXML() {
             def videos = resp.data.Video
             def whatToCallMe = ""
     	    def playingDevices = [:]
+            def stillPlaying = []
             
             videos.each { thing ->
                 if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
         	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
                 playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
             
-                if(settings?.stPoller){
-    			    def plexEvent = [:] << [ id: "${thing.Player.@machineIdentifier.text()}", type: "${thing.@type.text()}", status: "${thing.Player.@state.text()}", user: "${thing.User.@title.text()}", title: "${thing.@title.text()}" ]
+                if(settings?.stPoller || settings?.moreInfo){
+                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
+                                            type: thing.@type.text(),
+                                            status: thing.Player.@state.text(),
+                                            user: thing.User.@title.text(), 
+                                            title: thing.@title.text(),
+                                            height: thing.Media.@height,
+                                            width: thing.Media.@width,
+                                            videoResolution: thing.Media.@videoResolution.text(),
+                                            aspectRatio: thing.Media.@aspectRatio.text()]
+                    
                     stillPlaying << "${thing.Player.@machineIdentifier.text()}"
-        		    eventHandler(plexEvent)
+                    eventHandler(plexEvent)
                 }
             }
-            if(settings?.stPoller){
-        	    //stop anything that's no long visible in the playing list but was playing before
+            if(settings?.stPoller || settings?.moreInfo){
+        	    //stop anything that's no longer visible in the playing list but was playing before
         	    state.playingClients.each { id, data ->
-            	    if(!stillPlaying.contains("$id")){
-                	    def plexEvent2 = [:] << [ id: "${id}", type: "--", status: "stopped", user: "--", title: "--" ]
-                        eventHandler(plexEvent2)
+                    if(!stillPlaying.contains("$id")){
+                	    def plexEvent2 = [:] << [ id: "${id}", status: "stopped"]
+                        if(settings?.stPoller){ eventHandler(plexEvent2) }
                     }
                 }
             }
@@ -297,6 +310,7 @@ def getNowPlayingXML() {
         log.error "something went wrong: $e"
     }
 }
+
 
 def getClientsXML() {
     //getAuthenticationToken()
@@ -330,18 +344,16 @@ def getClientsXML() {
 ** INPUT HANDLERS
 ************************************************************/
 def plexExeHandler() {
-	def status = params.command
-	def userName = params.user
-	def playerName = params.player
-    def playerIP = params.ipadd
-	def mediaType = params.type
-    def playerID = params.id
-    def title = "none"
 	if(logging){
-        log.debug "PLAYER_ID:$playerID / STATUS:$status / USERNAME:$userName / PLAYERNAME:$playerName / PLAYERIP:$playerIP / MEDIA_TYPE:$mediaType"
+        log.debug "PLAYER_ID:$params.id / STATUS:$params.command / USERNAME:$params.user / PLAYERNAME:$params.player / PLAYERIP:$params.ipadd / MEDIA_TYPE:$params.type"
     }
-    def plexEvent = [:] << [ id: "$playerID", type: "$mediaType", status: "$status", user: "$userName", title: "$title" ]
+    def plexEvent = [:] << [ id: params.id,
+                            type: params.type,
+                            status: params.command,
+                            user: params.user,
+                            title: "none" ]
     eventHandler(plexEvent)
+    if(settings?.moreInfo){ getNowPlayingXML() }
 	return
 }
 
@@ -350,8 +362,6 @@ def plexWebHookHandler(){
     
     def payloadStart = request.body.indexOf('application/json') + 17    
     def newBody = request.body.substring(payloadStart)
-    //log.debug newBody
-	
     def jsonSlurper = new JsonSlurper()
 	def plexJSON = jsonSlurper.parseText(newBody)
     
@@ -361,17 +371,21 @@ def plexWebHookHandler(){
         log.debug "Player JSON: ${plexJSON.Player as String}"
         log.debug "Account JSON: ${plexJSON.Account}"
         log.debug "Event JSON: ${plexJSON.event}"
-        log.info "## EVENT FROM WEBHOOKS BELOW ##"
     }
     
-	def playerID = plexJSON.Player.uuid
-    def userName = plexJSON.Account.title
-	def mediaType = plexJSON.Metadata.type
-    def status = plexJSON.event
-    def title = plexJSON.Metadata.title
-    def plexEvent = [:] << [ id: "$playerID", type: "$mediaType", status: "$status", user: "$userName", title: "$title" ]
+    def plexEvent = [:] << [ id: plexJSON.Player.uuid, 
+                            type: plexJSON.Metadata.type, 
+                            status: plexJSON.event, 
+                            user: plexJSON.Account.title, 
+                            title: plexJSON.Metadata.title,
+                            rating: plexJSON.Metadata.contentRating,
+                            seasonNumber: plexJSON.Metadata.parentIndex,
+                            episode: plexJSON.Metadata.index,
+                            show: plexJSON.Metadata.grandparentTitle,
+                            live: plexJSON.Metadata.live ]
 
     eventHandler(plexEvent)
+    if(settings?.moreInfo){ getNowPlayingXML() }
 }
 
 def plexPoller(){
@@ -388,19 +402,81 @@ def plexPoller(){
 ************************************************************/
 
 def eventHandler(event) {
-    def status = event.status as String
-    def title = event.title as String
-    // change command to right format
-    switch(status) {
-		case ["media.play","media.resume","media.scrobble","onplay","play"]:	status = "playing"; break;
-        case ["media.pause","onpause","pause"]:									status = "paused";	break;
-        case ["media.stop","onstop","stop"]:									status = "stopped"; title = " "; break;
+    
+    pcd = getChildDevice(event.id)    
+    if (!pcd) {
+        if(logging){ log.info "Child not being monitored : ${event.id}" }
+    } else {
+        def status
+        if(event.status){
+            status = event.status as String
+            // change command to right format
+            switch(status) {
+                case ["media.play","media.resume","media.scrobble","onplay","play","buffering"]:    status = "playing"; break;
+                case ["media.pause","onpause","pause"]:                                 status = "paused";  break;
+                case ["media.stop","onstop","stop"]:                                    status = "stopped"; title = " "; break;
+            }
+            pcd.sendEvent(name: "status", value: status)
+        }
+        //If Stopped clear values
+        if (status == "stopped"){
+            pcd.sendEvent(name: "trackDescription", value: "-")
+            pcd.sendEvent(name: "playbackType", value: "-")
+            pcd.sendEvent(name: "Rating", value: "-")
+            pcd.sendEvent(name: "Season", value: "-")
+            pcd.sendEvent(name: "Episode", value: "-")
+            pcd.sendEvent(name: "Show", value: "-")
+            pcd.sendEvent(name: "Live", value: false)
+            if(moreInfo){
+                pcd.sendEvent(name: "aspectRatio", value: 0)
+                pcd.sendEvent(name: "width", value: 0)
+                pcd.sendEvent(name: "height", value: 0)
+                pcd.sendEvent(name: "videoResolution", value: "-")
+            }
+        }else{
+            if(event.title) pcd.sendEvent(name: "trackDescription", value: event.title)
+            if(event.type) pcd.sendEvent(name: "playbackType", value: event.type)
+            if(event.rating) pcd.sendEvent(name: "Rating", value: event.rating) 
+            if(event.seasonNumber) pcd.sendEvent(name: "Season", value: event.seasonNumber) 
+            if(event.episode) pcd.sendEvent(name: "Episode", value: event.episode)
+            if(event.show) pcd.sendEvent(name: "Show", value: event.show)
+            if(event.live) pcd.sendEvent(name: "Live", value: event.live)
+            if(moreInfo){
+                if(event.width) pcd.sendEvent(name: "width", value: event.width)
+                if(event.height) pcd.sendEvent(name: "height", value: event.height)
+                def resRatio = 0
+                if (!event.aspectRatio && event.width){ //if not aspect ratio then create one!
+                    def height = event.height.toInteger()
+                    def width = event.width.toInteger()
+                    if (height > 0){ resRatio = (width/height).toDouble().round(2) }
+                }
+                if(event.aspectRatio || event.width) pcd.sendEvent(name: "aspectRatio", value: event.aspectRatio)
+                if(event.videoResolution) pcd.sendEvent(name: "videoResolution", value: event.videoResolution)
+            }
+        }
     }
-    getChildDevices().each { pcd ->
-        if (event.id == pcd.deviceNetworkId){
-        	pcd.setPlayStatus(status)
-            pcd.playbackType(event.type)
-            pcd.setTitle(title)
+}
+
+def sendCommand (XPlexTargetClientIdentifier, command) {
+ 
+    def Params = [
+        uri: "http://${settings.plexServerIP}:32400${command}",
+        contentType: 'application/xml',
+        headers: [ 
+            'X-Plex-Token': state.authenticationToken,
+            'X-Plex-Target-Client-Identifier':XPlexTargetClientIdentifier
+        ]
+    ]
+    asynchttpGet("processCallBack",Params)
+}
+
+def processCallBack(response, data) {
+    if(logging){
+        log.debug "processCallBack"
+        if (response.hasError()){
+            log.error "got error # ${response.getStatus()} ${response.getErrorMessage()}"
+        }else{
+            log.debug "no error responce data = ${response.getData()} satus =  ${response.status}"
         }
     }
 }
