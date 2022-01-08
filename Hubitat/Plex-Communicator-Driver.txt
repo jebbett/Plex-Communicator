@@ -22,23 +22,27 @@
  */
 
 metadata {
-	definition (name: "Plex Communicator Device", namespace: "jebbett", author: "jebbett") {
-	    capability "Music Player"
-	    attribute "playbackType", "string"
-	    attribute "status", "string"
-        attribute "trackDescription", "string"
-        attribute "Rating", "string"
-        attribute "Season", "string"
-        attribute "Episode", "string"
-        attribute "Show", "string"
-        attribute "Live", "bool"
-        //Requires Additional Attributes to be turned on in App
-        attribute "width", "number"
-        attribute "height", "number"
-        attribute "aspectRatio", "number"
-        attribute "videoResolution", "string"
-        
-        command "CustomCommand",["string"] 
+	definition (
+        name: "Plex Communicator Device", 
+        namespace: "jebbett", 
+        author: "jebbett",
+        importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator-Driver.txt") {
+            capability "Music Player"
+            attribute "playbackType", "string"
+            attribute "status", "string"
+            attribute "trackDescription", "string"
+            attribute "Rating", "string"
+            attribute "Season", "string"
+            attribute "Episode", "string"
+            attribute "Show", "string"
+            attribute "Live", "bool"
+            //Requires Additional Attributes to be turned on in App
+            attribute "width", "number"
+            attribute "height", "number"
+            attribute "aspectRatio", "number"
+            attribute "videoResolution", "string"
+
+            command "CustomCommand",["string"] 
 	}
 }
 preferences {
