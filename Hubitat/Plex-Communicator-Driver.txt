@@ -1,7 +1,7 @@
 /**
  *  Plex Communicator Device
  *
- *  Copyright 2018 Jake Tebbett (jebbett)
+ *  Copyright 2022 Jake Tebbett (jebbett)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -12,48 +12,60 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * 2018-11-17	2.0		Updated to report playbackType Correctly
- * 2020-05-24   2.1    Updated to add track title
+ * 2018-11-17    2.0	Updated to report playbackType Correctly
+ * 2020-05-24    2.1    Updated to add track title
+ * 2022-01-08    3.0    Updated to include changes from martinez.mp3, plus some new attributes to report video resolution
+ *
+ *
+ * ### Control only confirmed to be working on: ###
+ * iPhone & Apple TV
  */
 
 metadata {
-	definition (
-		name: "Plex Communicator Device", 
-		namespace: "jebbett", 
-		author: "jebbett",
-		importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator-Driver.txt") {
-	capability "Music Player"
-	attribute "playbackType", "string"
-	attribute "status", "string"
+	definition (name: "Plex Communicator Device", namespace: "jebbett", author: "jebbett") {
+	    capability "Music Player"
+	    attribute "playbackType", "string"
+	    attribute "status", "string"
         attribute "trackDescription", "string"
+        attribute "Rating", "string"
+        attribute "Season", "string"
+        attribute "Episode", "string"
+        attribute "Show", "string"
+        attribute "Live", "bool"
+        //Requires Additional Attributes to be turned on in App
+        attribute "width", "number"
+        attribute "height", "number"
+        attribute "aspectRatio", "number"
+        attribute "videoResolution", "string"
+        
+        command "CustomCommand",["string"] 
 	}
 }
-
-// External
-def playbackType(type) {
-	sendEvent(name: "playbackType", value: type);
-    //log.debug "Playback type set as $type"
+preferences {
+    
 }
-
-def setPlayStatus(status){
-    // Value needs to be playing, paused or stopped
-    sendEvent(name: "status", value: status)
-	log.debug "Status set to $status"
-}
-
-def setTitle(title) {
-	sendEvent(name: "trackDescription", value: title);
-    //log.debug "Title set as $title"
+def installed() {
+    state.XPlexTargetClientIdentifier = device.deviceNetworkId //store the XPlexTargetClientIdentifier
 }
 
 def play() {	        
-    sendEvent(name: "status", value: "playing");
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/play") 
 }
-
 def pause() {
-    sendEvent(name: "status", value: "paused");
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/pause") 
 }
-
 def stop() {
-    sendEvent(name: "status", value: "stopped");
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/stop") 
+}
+def previousTrack (){
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/skipPrevious")
+}
+def nextTrack (){
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/skipNext")
+}
+def setLevel(volumelevel){
+    parent.sendCommand (state.XPlexTargetClientIdentifier,"/player/playback/setParameters?volume=${volumelevel}")
+}
+def CustomCommand (cmd){
+    parent.sendCommand (state.XPlexTargetClientIdentifier,cmd)
 }
