@@ -33,8 +33,8 @@ definition(
     iconUrl: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
     iconX2Url: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
     iconX3Url: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
-    oauth: [displayName: "PlexServer", displayLink: ""])
-    importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator.txt"
+    oauth: [displayName: "PlexServer", displayLink: ""],
+    importUrl: "https://raw.githubusercontent.com/jebbett/Plex-Communicator/master/Hubitat/Plex-Communicator.txt")
 
 
 def installed() {
