@@ -70,6 +70,7 @@ def initialize() {
     }
     // Just in case plexPoller has gasped it's last breath (in case it's used)
     if(settings?.stPoller){runEvery3Hours(plexPoller)}
+    state.toClear = []
 }
 
 preferences {
@@ -423,12 +424,13 @@ def eventHandler(event) {
         //If Stopped clear values
         if (status == "stopped"){
             if (stopClearDelay){
-                runIn(3, 'stopClear', [data: event.id])
+                runIn(10, 'stopClear')
+                state.toClear.add(event.id)
             }else{
                 stopClear(event.id)
             }
         }else{
-            unschedule()
+            if (stopClearDelay){ state.toClear.removeElement(event.id) }
             if(event.title) pcd.sendEvent(name: "trackDescription", value: event.title)
             if(event.type) pcd.sendEvent(name: "playbackType", value: event.type)
             if(event.rating) pcd.sendEvent(name: "Rating", value: event.rating) 
@@ -453,20 +455,27 @@ def eventHandler(event) {
 }
 
 def stopClear(id){
-    pcd = getChildDevice(id)
-    pcd.sendEvent(name: "trackDescription", value: "-")
-    pcd.sendEvent(name: "playbackType", value: "-")
-    pcd.sendEvent(name: "Rating", value: "-")
-    pcd.sendEvent(name: "Season", value: "-")
-    pcd.sendEvent(name: "Episode", value: "-")
-    pcd.sendEvent(name: "Show", value: "-")
-    pcd.sendEvent(name: "Live", value: false)
-    if(moreInfo){
-        pcd.sendEvent(name: "aspectRatio", value: 0)
-        pcd.sendEvent(name: "width", value: 0)
-        pcd.sendEvent(name: "height", value: 0)
-        pcd.sendEvent(name: "videoResolution", value: "-")
+    def list = []
+    if (stopClearDelay){ list = state.toClear } else { list.add(id) }
+    
+    list.each { dev ->
+        pcd = getChildDevice(dev)
+        pcd.sendEvent(name: "trackDescription", value: "-")
+        pcd.sendEvent(name: "playbackType", value: "-")
+        pcd.sendEvent(name: "Rating", value: "-")
+        pcd.sendEvent(name: "Season", value: "-")
+        pcd.sendEvent(name: "Episode", value: "-")
+        pcd.sendEvent(name: "Show", value: "-")
+        pcd.sendEvent(name: "Live", value: false)
+        if(moreInfo){
+            pcd.sendEvent(name: "aspectRatio", value: 0)
+            pcd.sendEvent(name: "width", value: 0)
+            pcd.sendEvent(name: "height", value: 0)
+            pcd.sendEvent(name: "videoResolution", value: "-")
+        }
     }
+    
+    if (stopClearDelay){ state.toClear = [] }
 }
 
 def sendCommand (XPlexTargetClientIdentifier, command) {
@@ -492,3 +501,4 @@ def processCallBack(response, data) {
         }
     }
 }
+
