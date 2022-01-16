@@ -21,6 +21,7 @@ import groovy.json.JsonSlurper
  *  2.0 - Too many changes to list them all (General improvements and fixes + added track description)
  *  3.0 - Added Apple contol & various attributes & general improvements by martinez.mp3
  *      - Plus added additional option to pull variables not in the webhook (although uses another call so only enablew if needed)
+ *  3.1 - Added optional 3s delay for clearing values on stop in case you want to retain attribute for logic
  *
  */
 
@@ -122,6 +123,7 @@ def mainPage() {
         	href "clientPage", title:"Select Your Devices", description: "Select the devices you want to monitor" 
             href "authPage", title:"Plex Account Details", description: "Update Plex Account Details"
         	href(name: "ApiSettings", title: "Connection Methods", required: false, page: "ApiSettings", description: "Select your method for connecting to Plex")
+            input "stopClearDelay", "bool", title: "Delay clearing attributes on stop (3 sec)", defaultValue:false, submitOnChange: true
             input "moreInfo", "bool", title: "Get more info from server (Will increase load on hubitat)", defaultValue:false, submitOnChange: true
             input "logging", "bool", title: "Turn on to enable debug logs", defaultValue:false, submitOnChange: true
     	}
@@ -420,20 +422,13 @@ def eventHandler(event) {
         }
         //If Stopped clear values
         if (status == "stopped"){
-            pcd.sendEvent(name: "trackDescription", value: "-")
-            pcd.sendEvent(name: "playbackType", value: "-")
-            pcd.sendEvent(name: "Rating", value: "-")
-            pcd.sendEvent(name: "Season", value: "-")
-            pcd.sendEvent(name: "Episode", value: "-")
-            pcd.sendEvent(name: "Show", value: "-")
-            pcd.sendEvent(name: "Live", value: false)
-            if(moreInfo){
-                pcd.sendEvent(name: "aspectRatio", value: 0)
-                pcd.sendEvent(name: "width", value: 0)
-                pcd.sendEvent(name: "height", value: 0)
-                pcd.sendEvent(name: "videoResolution", value: "-")
+            if (stopClearDelay){
+                runIn(3, 'stopClear', [data: event.id])
+            }else{
+                stopClear(event.id)
             }
         }else{
+            unschedule()
             if(event.title) pcd.sendEvent(name: "trackDescription", value: event.title)
             if(event.type) pcd.sendEvent(name: "playbackType", value: event.type)
             if(event.rating) pcd.sendEvent(name: "Rating", value: event.rating) 
@@ -454,6 +449,23 @@ def eventHandler(event) {
                 if(event.videoResolution) pcd.sendEvent(name: "videoResolution", value: event.videoResolution)
             }
         }
+    }
+}
+
+def stopClear(id){
+    pcd = getChildDevice(id)
+    pcd.sendEvent(name: "trackDescription", value: "-")
+    pcd.sendEvent(name: "playbackType", value: "-")
+    pcd.sendEvent(name: "Rating", value: "-")
+    pcd.sendEvent(name: "Season", value: "-")
+    pcd.sendEvent(name: "Episode", value: "-")
+    pcd.sendEvent(name: "Show", value: "-")
+    pcd.sendEvent(name: "Live", value: false)
+    if(moreInfo){
+        pcd.sendEvent(name: "aspectRatio", value: 0)
+        pcd.sendEvent(name: "width", value: 0)
+        pcd.sendEvent(name: "height", value: 0)
+        pcd.sendEvent(name: "videoResolution", value: "-")
     }
 }
 
