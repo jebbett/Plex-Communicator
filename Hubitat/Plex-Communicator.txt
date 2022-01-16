@@ -424,7 +424,7 @@ def eventHandler(event) {
         //If Stopped clear values
         if (status == "stopped"){
             if (stopClearDelay){
-                runIn(10, 'stopClear')
+                runIn(3, 'stopClear')
                 state.toClear.add(event.id)
             }else{
                 stopClear(event.id)
@@ -501,4 +501,3 @@ def processCallBack(response, data) {
         }
     }
 }
-
