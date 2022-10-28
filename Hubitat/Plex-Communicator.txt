@@ -22,6 +22,7 @@ import groovy.json.JsonSlurper
  *  3.0 - Added Apple contol & various attributes & general improvements by martinez.mp3
  *      - Plus added additional option to pull variables not in the webhook (although uses another call so only enablew if needed)
  *  3.1 - Added optional 3s delay for clearing values on stop in case you want to retain attribute for logic
+ *  3.2 - Added bodge fix for audio devices, specifically Alexa that shows under a different ID
  *
  */
 
@@ -273,11 +274,32 @@ def getNowPlayingXML() {
 		httpGet(params) { resp ->
             
             def videos = resp.data.Video
+            def tracks = resp.data.Track
             def whatToCallMe = ""
     	    def playingDevices = [:]
             def stillPlaying = []
             
             videos.each { thing ->
+                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
+        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
+                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
+            
+                if(settings?.stPoller || settings?.moreInfo){
+                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
+                                            type: thing.@type.text(),
+                                            status: thing.Player.@state.text(),
+                                            user: thing.User.@title.text(), 
+                                            title: thing.@title.text(),
+                                            height: thing.Media.@height,
+                                            width: thing.Media.@width,
+                                            videoResolution: thing.Media.@videoResolution.text(),
+                                            aspectRatio: thing.Media.@aspectRatio.text()]
+                    
+                    stillPlaying << "${thing.Player.@machineIdentifier.text()}"
+                    eventHandler(plexEvent)
+                }
+            }
+            tracks.each { thing ->
                 if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
         	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
                 playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
