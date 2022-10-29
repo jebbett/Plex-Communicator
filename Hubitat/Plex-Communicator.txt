@@ -23,6 +23,7 @@ import groovy.json.JsonSlurper
  *      - Plus added additional option to pull variables not in the webhook (although uses another call so only enablew if needed)
  *  3.1 - Added optional 3s delay for clearing values on stop in case you want to retain attribute for logic
  *  3.2 - Added bodge fix for audio devices, specifically Alexa that shows under a different ID
+ *  3.3 - Updated to work with Plex Cloud (in theory) and also be able to get devices from events rather than querying the local plex server (no local server with cloud)
  *
  */
 
@@ -89,6 +90,7 @@ mappings {
   path("/statechanged/:command") 	{ action: [GET: "plexExeHandler"] }
   path("/p2stset") 					{ action: [GET: "p2stset"]   }
   path("/pwhset") 					{ action: [GET: "pwhset"]   }
+  path("/pwhcset") 					{ action: [GET: "pwhcset"]   }
   path("/pwh") 						{ action: [POST: "plexWebHookHandler"] }
 }
 
@@ -125,6 +127,7 @@ def mainPage() {
         	href "clientPage", title:"Select Your Devices", description: "Select the devices you want to monitor" 
             href "authPage", title:"Plex Account Details", description: "Update Plex Account Details"
         	href(name: "ApiSettings", title: "Connection Methods", required: false, page: "ApiSettings", description: "Select your method for connecting to Plex")
+            input "plexCloud", "bool", title: "I'm using Plex Cloud", defaultValue:false, submitOnChange: true
             input "stopClearDelay", "bool", title: "Delay clearing attributes on stop (3 sec)", defaultValue:false, submitOnChange: true
             input "moreInfo", "bool", title: "Get more info from server (Will increase load on hubitat)", defaultValue:false, submitOnChange: true
             input "logging", "bool", title: "Turn on to enable debug logs", defaultValue:false, submitOnChange: true
@@ -141,15 +144,16 @@ def mainPage() {
 def ApiSettings() {
     dynamicPage(name: "ApiSettings", title: "Select Your Connection Method", install: false, uninstall: false) {      
         section("1. Plex Webhooks - Plex Pass Only (Best)") {
-        	paragraph("Plex Webhooks is the best method for connecting Plex to your hub, however you will need an active Plex Pass Subscription to use it")
-        	href url: "${getLocalApiServerUrl()}/${app.id}/pwhset?access_token=${state.accessToken}", style:"embedded", required:false, title:"Plex Webhooks Settings", description: ""  		
+        	paragraph("Plex Webhooks is the best method for connecting Plex to your hub, however you will need an active Plex Pass Subscription to use it, if you have your own local server use the local API, otherwise use the Cloud API (Cloud integration is more limited, devices will need to have played in order to show in the devices list)")
+        	href url: "${getLocalApiServerUrl()}/${app.id}/pwhset?access_token=${state.accessToken}", style:"embedded", required:false, title:"Plex Webhooks Local API", description: ""
+            href url: "${getLocalApiServerUrl()}/${app.id}/pwhcset?access_token=${state.accessToken}", style:"embedded", required:false, title:"Plex Webhooks Cloud API", description: ""
         }
         section("2. Plex2Hub Program <B>*NOT WORKING PRESENTLY*</B>") {
         	paragraph("This involves running a program on an always on computer")
             href url: "${getLocalApiServerUrl()}/${app.id}/p2stset?access_token=${state.accessToken}", style:"embedded", required:false, title:"Plex2Hub Program Settings", description: ""    		
         }
         section("3. Hub Polling *Not Recommended*") {
-        	paragraph("Your hub will poll every 10 seconds and request the status from Plex, however this method is unreliable and puts increased load on your hub and your network (Don't complain to me that it stops working occasionally)")
+        	paragraph("Your hub will poll every 10 seconds and request the status from Plex, however this method is unreliable and puts increased load on your hub and your network (Don't complain if it stops working occasionally)")
             input "stPoller", "bool", title: "Enable - At your own risk", defaultValue:false, submitOnChange: true
         }
         if(settings?.stPoller){plexPoller()}
@@ -157,8 +161,16 @@ def ApiSettings() {
 }
 
 def pwhset() {
-    def html = """<html><head><title>Plex Webhook Settings</title></head><body><h1>
+    def html = """<html><head><title>Plex Webhook</title></head><body><h1>
         ${getFullLocalApiServerUrl()}/pwh?access_token=${state.accessToken}<br />
+
+    </h1></body></html>"""
+    render contentType: "text/html", data: html, status: 200
+}
+
+def pwhcset() {
+    def html = """<html><head><title>Plex Webhook Cloud</title></head><body><h1>
+        ${getFullApiServerUrl()}/pwh?access_token=${state.accessToken}<br />
 
     </h1></body></html>"""
     render contentType: "text/html", data: html, status: 200
@@ -225,28 +237,37 @@ def clientPage() {
     pause(2000)
     def devs = getClientList()
 	return dynamicPage(name: "clientPage", title: "NOTE:", nextPage: mainPage, uninstall: false, install: true) {
-        section("If your device does not appear in the list"){}
-        section("Devices currently playing video will have a [►] icon next to them, this can be helpful when multiple devices share the same name, if a device is playing but not shown then press Done and come back to this screen"){
+        section("If your device does not appear in the list, enable the below option to listen for all events"){
+            input "capWHDevs", "bool", title: "Find devices that generate events for 15 minutes", defaultValue:false, submitOnChange: true
+        }
+		if (capWHDevs) {
+			log.warn "API device monitoring for 15 minutes..."
+			runIn(900,disableAPIMon)
+    	}
+        section("Devices currently playing video will have a [►] icon next to them, if you use the above option then all devices found during the 15 minutes will also have a play icon, this can be helpful when multiple devices share the same name, if a device is playing but not shown then press Done and come back to this screen"){
         	input "devices", "enum", title: "Select Your Devices", options: devs, multiple: true, required: false, submitOnChange: true
   		}
         section("Use the below to clear and re-load the device list"){
             href(name: "clearClients", title:"RESET Devices List", description: "", page: "clearClients", required: false)
         }
-        
     }
+}
+
+def disableAPIMon(){
+    log.warn "API Moniting Automatically disabled..."
+	state.heardClients = [:]
+    app.updateSetting("capWHDevs",[value:"false",type:"bool"])
 }
 
 def clearClients() {
 	state.plexClients = [:]
-    getClientsXML()
-    getNowPlayingXML()
-    pause(2000)
     mainPage()
 }
 
 def getClientList() {
     def devList = [:]
-    state.plexClients.each { id, details -> devList << [ "$id": "${details.name}" ] }
+	state.plexClients.each { id, details -> devList << [ "$id": "${details.name}" ] }
+	state.heardClients.each { id, details -> devList << [ "$id": "[►] ${details.name}" ] }
     state.playingClients.each { id, details -> devList << [ "$id": "[►] ${details.name}" ] }
     return devList.sort { a, b -> a.value.toLowerCase() <=> b.value.toLowerCase() }
 }
@@ -257,6 +278,9 @@ def getClients(){
     if(!isMap){state.plexClients = [:]}
     def isMap2 = state.playingClients instanceof Map
     if(!isMap2){state.playingClients = [:]}
+    // Get already linked devices so we don't lose them!
+    getChildClients()
+    
     // Get devices.xml clients
     getClientsXML()
     // Request server:32400/status/sessions clients - Chromecast for example is not in devices.
@@ -264,105 +288,117 @@ def getClients(){
 }
 
 def getNowPlayingXML() {    
-    def params = [
-		uri: "http://${settings.plexServerIP}:32400/status/sessions",
-		contentType: 'application/xml',
-		headers: [ 'X-Plex-Token': state.authenticationToken ]
-	]
-    
-	try {    
-		httpGet(params) { resp ->
+    if (!plexCloud){
+        def params = [
+			uri: "http://${settings.plexServerIP}:32400/status/sessions",
+			contentType: 'application/xml',
+			headers: [ 'X-Plex-Token': state.authenticationToken ]
+		]
+   	 
+		try {    
+			httpGet(params) { resp ->
             
-            def videos = resp.data.Video
-            def tracks = resp.data.Track
-            def whatToCallMe = ""
-    	    def playingDevices = [:]
-            def stillPlaying = []
-            
-            videos.each { thing ->
-                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
-        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
-                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
-            
-                if(settings?.stPoller || settings?.moreInfo){
-                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
-                                            type: thing.@type.text(),
-                                            status: thing.Player.@state.text(),
-                                            user: thing.User.@title.text(), 
-                                            title: thing.@title.text(),
-                                            height: thing.Media.@height,
-                                            width: thing.Media.@width,
-                                            videoResolution: thing.Media.@videoResolution.text(),
-                                            aspectRatio: thing.Media.@aspectRatio.text()]
-                    
-                    stillPlaying << "${thing.Player.@machineIdentifier.text()}"
-                    eventHandler(plexEvent)
-                }
-            }
-            tracks.each { thing ->
-                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
-        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
-                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
-            
-                if(settings?.stPoller || settings?.moreInfo){
-                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
-                                            type: thing.@type.text(),
-                                            status: thing.Player.@state.text(),
-                                            user: thing.User.@title.text(), 
-                                            title: thing.@title.text(),
-                                            height: thing.Media.@height,
-                                            width: thing.Media.@width,
-                                            videoResolution: thing.Media.@videoResolution.text(),
-                                            aspectRatio: thing.Media.@aspectRatio.text()]
-                    
-                    stillPlaying << "${thing.Player.@machineIdentifier.text()}"
-                    eventHandler(plexEvent)
-                }
-            }
-            if(settings?.stPoller || settings?.moreInfo){
-        	    //stop anything that's no longer visible in the playing list but was playing before
-        	    state.playingClients.each { id, data ->
-                    if(!stillPlaying.contains("$id")){
-                	    def plexEvent2 = [:] << [ id: "${id}", status: "stopped"]
-                        if(settings?.stPoller){ eventHandler(plexEvent2) }
-                    }
-                }
-            }
-            state.plexClients << playingDevices
-            state.playingClients = playingDevices
-        }
-    } catch (e) {
-        log.error "something went wrong: $e"
-    }
+	            def videos = resp.data.Video
+	            def tracks = resp.data.Track
+	            def whatToCallMe = ""
+	    	    def playingDevices = [:]
+	            def stillPlaying = []
+	            
+	            videos.each { thing ->
+	                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
+	        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
+	                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
+	            
+	                if(settings?.stPoller || settings?.moreInfo){
+	                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
+	                                            playername: whatToCallMe,
+	                                            type: thing.@type.text(),
+	                                            status: thing.Player.@state.text(),
+	                                            user: thing.User.@title.text(), 
+	                                            title: thing.@title.text(),
+	                                            height: thing.Media.@height,
+	                                            width: thing.Media.@width,
+	                                            videoResolution: thing.Media.@videoResolution.text(),
+	                                            aspectRatio: thing.Media.@aspectRatio.text()]
+	                    
+	                    stillPlaying << "${thing.Player.@machineIdentifier.text()}"
+	                    eventHandler(plexEvent)
+	                }
+	            }
+	            tracks.each { thing ->
+	                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
+	        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
+	                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
+	            
+	                if(settings?.stPoller || settings?.moreInfo){
+	                    def plexEvent = [:] << [ id: thing.Player.@machineIdentifier.text(),
+												playername: whatToCallMe,
+												type: thing.@type.text(),
+												status: thing.Player.@state.text(),
+												user: thing.User.@title.text(), 
+												title: thing.@title.text(),
+												height: thing.Media.@height,
+	                                            width: thing.Media.@width,
+	                                            videoResolution: thing.Media.@videoResolution.text(),
+	                                            aspectRatio: thing.Media.@aspectRatio.text()]
+	                    
+	                    stillPlaying << "${thing.Player.@machineIdentifier.text()}"
+	                    eventHandler(plexEvent)
+	                }
+	            }
+	            if(settings?.stPoller || settings?.moreInfo){
+	        	    //stop anything that's no longer visible in the playing list but was playing before
+	        	    state.playingClients.each { id, data ->
+	                    if(!stillPlaying.contains("$id")){
+	                	    def plexEvent2 = [:] << [ id: "${id}", status: "stopped"]
+	                        if(settings?.stPoller){ eventHandler(plexEvent2) }
+	                    }
+	                }
+	            }
+	            state.plexClients << playingDevices
+	            state.playingClients = playingDevices
+	        }
+	    } catch (e) {
+	        log.error "something went wrong: $e"
+	    }
+	}
 }
 
 
 def getClientsXML() {
-    //getAuthenticationToken()
-    if(logging){ log.debug "Auth Token: $state.authenticationToken" }
-    def xmlDevices = [:]
-    // Get from Devices List
-    def paramsg = [
-		uri: "https://plex.tv/devices.xml",
-		contentType: 'application/xml',
-		headers: [ 'X-Plex-Token': state.authenticationToken ]
-	]
-	httpGet(paramsg) { resp ->
-        if(logging){ log.debug "Parsing plex.tv/devices.xml" }
-        def devices = resp.data.Device
-        devices.each { thing ->        
-        	// If not these things
-        	if(thing.@name.text()!="Plex Communicator" && !thing.@provides.text().contains("server")){      	
-            	//Define name based on name unless blank then use device name
-                def whatToCallMe = "Unknown"
-                if(thing.@name.text() != "") 		{whatToCallMe = "${thing.@name.text()}-${thing.@product.text()}"}
-                else if(thing.@device.text()!="")	{whatToCallMe = "${thing.@device.text()}-${thing.@product.text()}"}  
-                xmlDevices << [ (thing.@clientIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.@clientIdentifier.text()}"]]
-        	}
-    	}   
-    }
-    //Get from status
-    state.plexClients << xmlDevices
+    if (!plexCloud){
+		//getAuthenticationToken()
+	    if(logging){ log.debug "Auth Token: $state.authenticationToken" }
+	    def xmlDevices = [:]
+	    // Get from Devices List
+	    def paramsg = [
+			uri: "https://plex.tv/devices.xml",
+			contentType: 'application/xml',
+			headers: [ 'X-Plex-Token': state.authenticationToken ]
+		]
+		httpGet(paramsg) { resp ->
+	        if(logging){ log.debug "Parsing plex.tv/devices.xml" }
+	        def devices = resp.data.Device
+	        devices.each { thing ->        
+	        	// If not these things
+	        	if(thing.@name.text()!="Plex Communicator" && !thing.@provides.text().contains("server")){      	
+	            	//Define name based on name unless blank then use device name
+	                def whatToCallMe = "Unknown"
+	                if(thing.@name.text() != "") 		{whatToCallMe = "${thing.@name.text()}-${thing.@product.text()}"}
+	                else if(thing.@device.text()!="")	{whatToCallMe = "${thing.@device.text()}-${thing.@product.text()}"}  
+	                xmlDevices << [ (thing.@clientIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.@clientIdentifier.text()}"]]
+	        	}
+	    	}   
+	    }
+	    //Get from status
+	    state.plexClients << xmlDevices
+	}
+}
+
+def getChildClients() {
+    def childDevs = [:]
+    getChildDevices().each { childDevs << [ (it.deviceNetworkId): [name: "${it.label}", id: "${it.deviceNetworkId}"]]}
+    state.plexClients << childDevs
 }
 
 /***********************************************************
@@ -398,7 +434,8 @@ def plexWebHookHandler(){
         log.debug "Event JSON: ${plexJSON.event}"
     }
     
-    def plexEvent = [:] << [ id: plexJSON.Player.uuid, 
+    def plexEvent = [:] << [ id: plexJSON.Player.uuid,
+                            playername: plexJSON.Player.title,
                             type: plexJSON.Metadata.type, 
                             status: plexJSON.event, 
                             user: plexJSON.Account.title, 
@@ -431,6 +468,12 @@ def eventHandler(event) {
     pcd = getChildDevice(event.id)    
     if (!pcd) {
         if(logging){ log.info "Child not being monitored : ${event.id}" }
+		if(settings?.capWHDevs) {
+			// set lists
+			def isMapL = state.heardClients instanceof Map
+    		if(!isMapL){state.heardClients = [:]}
+			state.heardClients << [ (event.id): [name: "${event.playername}", id: "${event.id}"]]
+		}
     } else {
         def status
         if(event.status){
