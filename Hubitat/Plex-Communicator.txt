@@ -24,6 +24,7 @@ import groovy.json.JsonSlurper
  *  3.1 - Added optional 3s delay for clearing values on stop in case you want to retain attribute for logic
  *  3.2 - Added bodge fix for audio devices, specifically Alexa that shows under a different ID
  *  3.3 - Updated to work with Plex Cloud (in theory) and also be able to get devices from events rather than querying the local plex server (no local server with cloud)
+ *  3.4 - Updated default player name to "Unknown" rather than empty for XML
  *
  */
 
@@ -300,7 +301,7 @@ def getNowPlayingXML() {
             
 	            def videos = resp.data.Video
 	            def tracks = resp.data.Track
-	            def whatToCallMe = ""
+	            def whatToCallMe = "Unknown"
 	    	    def playingDevices = [:]
 	            def stillPlaying = []
 	            
