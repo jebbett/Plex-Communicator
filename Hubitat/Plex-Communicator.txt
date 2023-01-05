@@ -25,6 +25,7 @@ import groovy.json.JsonSlurper
  *  3.2 - Added bodge fix for audio devices, specifically Alexa that shows under a different ID
  *  3.3 - Updated to work with Plex Cloud (in theory) and also be able to get devices from events rather than querying the local plex server (no local server with cloud)
  *  3.4 - Updated default player name to "Unknown" rather than empty for XML
+ *  3.5 - Added "Unknown" to XML fetch and added device name to logging when adding device
  *
  */
 
@@ -60,8 +61,9 @@ def initialize() {
             def existingDevice = getChildDevice(deviceId)
             if(!existingDevice) {
                 def theHub = location.hubs[0]
-                if(logging){ log.debug "ADDING DEVICE ID:${deviceId} on HUB [${theHub.id}] : ${theHub}"}
-                def childDevice = addChildDevice("jebbett", "Plex Communicator Device", deviceId, theHub.id, [name: deviceId, label: storedDevices."$deviceId".name, completedSetup: false])
+				def dName = storedDevices."$deviceId".name
+                if(logging){ log.debug "ADDING DEVICE: ${dName} ID:${deviceId} on HUB [${theHub.id}] : ${theHub}"}
+                def childDevice = addChildDevice("jebbett", "Plex Communicator Device", deviceId, theHub.id, [name: deviceId, label: dName, completedSetup: false])
             }
         } catch (e) { log.error "Error creating device: ${e}" }
     }
@@ -199,6 +201,7 @@ def authPage() {
     return dynamicPage(name: "authPage", nextPage: authPage2, install: false) {
         def hub = location.hubs[0]
         section("Plex Login Details") {
+			paragraph("If you use 2FA then please put your 2FA PIN at the end of your password")
         	input "plexUserName", "text", "title": "Plex Username", multiple: false, required: true
     		input "plexPassword", "password", "title": "Plex Password", multiple: false, required: true
             input "plexServerIP", "text", "title": "Server IP", multiple: false, required: true
@@ -281,7 +284,6 @@ def getClients(){
     if(!isMap2){state.playingClients = [:]}
     // Get already linked devices so we don't lose them!
     getChildClients()
-    
     // Get devices.xml clients
     getClientsXML()
     // Request server:32400/status/sessions clients - Chromecast for example is not in devices.
@@ -306,7 +308,8 @@ def getNowPlayingXML() {
 	            def stillPlaying = []
 	            
 	            videos.each { thing ->
-	                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
+	                whatToCallMe = "Unknown"
+					if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
 	        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
 	                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
 	            
@@ -327,7 +330,8 @@ def getNowPlayingXML() {
 	                }
 	            }
 	            tracks.each { thing ->
-	                if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
+	                whatToCallMe = "Unknown"
+					if(thing.Player.@title.text() != "") 		{whatToCallMe = "${thing.Player.@title.text()}-${thing.Player.@product.text()}"}
 	        	    else if(thing.Player.@device.text()!="")	{whatToCallMe = "${thing.Player.@device.text()}-${thing.Player.@product.text()}"}
 	                playingDevices << [ (thing.Player.@machineIdentifier.text()): [name: "${whatToCallMe}", id: "${thing.Player.@machineIdentifier.text()}"]]
 	            
