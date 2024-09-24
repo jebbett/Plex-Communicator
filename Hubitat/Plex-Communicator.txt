@@ -26,6 +26,7 @@ import groovy.json.JsonSlurper
  *  3.3 - Updated to work with Plex Cloud (in theory) and also be able to get devices from events rather than querying the local plex server (no local server with cloud)
  *  3.4 - Updated default player name to "Unknown" rather than empty for XML
  *  3.5 - Added "Unknown" to XML fetch and added device name to logging when adding device
+ *  3.6 - Added release Year to be able to perform accurate searches for Movie/Episode via web hooks via Rule Machine
  *
  */
 
@@ -449,6 +450,7 @@ def plexWebHookHandler(){
                             seasonNumber: plexJSON.Metadata.parentIndex,
                             episode: plexJSON.Metadata.index,
                             show: plexJSON.Metadata.grandparentTitle,
+                            year: plexJSON.Metadata.year,
                             live: plexJSON.Metadata.live ]
 
     eventHandler(plexEvent)
@@ -503,7 +505,8 @@ def eventHandler(event) {
             if (stopClearDelay){ state.toClear.removeElement(event.id) }
             if(event.title) pcd.sendEvent(name: "trackDescription", value: event.title)
             if(event.type) pcd.sendEvent(name: "playbackType", value: event.type)
-            if(event.rating) pcd.sendEvent(name: "Rating", value: event.rating) 
+            if(event.rating) pcd.sendEvent(name: "Rating", value: event.rating)
+            if(event.year) pcd.sendEvent(name: "Year", value: event.year) 
             if(event.seasonNumber) pcd.sendEvent(name: "Season", value: event.seasonNumber) 
             if(event.episode) pcd.sendEvent(name: "Episode", value: event.episode)
             if(event.show) pcd.sendEvent(name: "Show", value: event.show)
@@ -533,6 +536,7 @@ def stopClear(id){
         pcd.sendEvent(name: "trackDescription", value: "-")
         pcd.sendEvent(name: "playbackType", value: "-")
         pcd.sendEvent(name: "Rating", value: "-")
+        pcd.sendEvent(name: "Year", value: "-")
         pcd.sendEvent(name: "Season", value: "-")
         pcd.sendEvent(name: "Episode", value: "-")
         pcd.sendEvent(name: "Show", value: "-")
