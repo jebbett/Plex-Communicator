@@ -4,7 +4,7 @@
     "repoName": "plex-communicator",
     "repoBranch": "master",
     "name": "Plex Communicator",
-    "author": "Jake Tebbett",
+    "author": "jebbett",
     "description": "Integrate your Plex devices in to SmartThings",
     "category": "My Apps",
     "bannerUrl": "https://github.com/jebbett/Plex-Communicator/raw/master/images/pcbanner.png",
