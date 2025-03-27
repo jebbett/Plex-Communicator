@@ -23,7 +23,7 @@
 definition(
     name: "Plex Communicator",
     namespace: "jebbett",
-    author: "Jake Tebbett",
+    author: "jebbett",
     description: "Allow SmartThings and Plex to Communicate",
     category: "My Apps",
     iconUrl: "https://github.com/jebbett/Plex-Communicator/raw/master/icon.png",
