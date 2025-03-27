@@ -2,7 +2,7 @@ import groovy.json.JsonSlurper
 /**
  *  Plex Communicator
  *
- *  Copyright 2018 Jake Tebbett
+ *  Copyright 2018 jebbett
  *	Credit To: Christian Hjelseth, iBeech & Ph4r as snippets of code taken and amended from their apps
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
