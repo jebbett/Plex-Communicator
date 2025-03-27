@@ -9,8 +9,8 @@ This will not provide control of Plex, but will give you the current state, type
 Note: (Hubitat files are in the Hubitat folder)
 
 1. Install the App and enable OAuth
-2. Install the Driver (Hubitat) / Device Hander (SmartThings)
-3. Run the app, you will need ot login and add the LAN IP of your plex server
+2. Install the Driver (Hubitat) / Device Handler (SmartThings)
+3. Run the app, you will need to login and add the LAN IP of your plex server
 4. Select your devices and these will appear where they should
 5. Setup your "Connection Method", taking the information required from the Plex Communicator App
 6. Enjoy
